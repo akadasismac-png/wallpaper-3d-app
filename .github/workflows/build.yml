@@ -1,7 +1,8 @@
-name: Build 3D Wallpaper APK
+name: Build Wallpaper APK
 
 on:
   push:
+    branches: [main]
     tags:
       - 'v*'
 
@@ -9,14 +10,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20.x
+          cache: 'npm'
 
-      - name: Setup Expo
+      - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
@@ -26,16 +29,23 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build APK
-        run: eas build --platform android --profile preview --non-interactive --no-wait
+      - name: Build Android APK
+        run: eas build --platform android --profile preview --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Download and upload APK
+      - name: Get Build URL and Upload
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
-          BUILD_URL=$(eas build:list --platform android --status finished --limit 1 --json | jq -r '.[0].artifacts.buildUrl')
-          curl -L "$BUILD_URL" -o app-release.apk
-          echo "Build URL: $BUILD_URL"
+          sleep 10
+          BUILD_URL=$(eas build:list --platform android --status finished --limit 1 --json --non-interactive 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const b=JSON.parse(d);console.log(b[0]?.artifacts?.buildUrl||'')}catch(e){}})")
+          if [ -n "$BUILD_URL" ]; then
+            curl -L "$BUILD_URL" -o app-release.apk
+            echo "APK downloaded: $BUILD_URL"
+          fi
 
-      - name: Create Release
+      - name: Create GitHub Release with APK
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: app-release.apk
