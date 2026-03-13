@@ -1,0 +1,44 @@
+name: Build 3D Wallpaper APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build APK
+        run: eas build --platform android --profile preview --non-interactive --no-wait
+
+      - name: Download and upload APK
+        run: |
+          BUILD_URL=$(eas build:list --platform android --status finished --limit 1 --json | jq -r '.[0].artifacts.buildUrl')
+          curl -L "$BUILD_URL" -o app-release.apk
+          echo "Build URL: $BUILD_URL"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app-release.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
